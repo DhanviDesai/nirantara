@@ -348,7 +348,8 @@ static int encode_signature_bitstring_der(const unsigned char *sig_der,
         goto out;
     }
 
-    if (ASN1_BIT_STRING_set(bit, sig_der, (int)sig_der_len) != 1) {
+    if (ASN1_BIT_STRING_set(bit, (unsigned char *)sig_der,
+                            (int)sig_der_len) != 1) {
         goto out;
     }
     bit->flags &= ~(ASN1_STRING_FLAG_BITS_LEFT | 0x07);

@@ -62,7 +62,7 @@ CSR subject. That keeps the enrollment API authoritative for MQTT identity.
 ## Response
 
 ```http
-HTTP/1.1 201 Created
+HTTP/1.1 200 OK
 Content-Type: application/x-pem-file
 
 -----BEGIN CERTIFICATE-----

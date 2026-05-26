@@ -261,7 +261,7 @@ static void handle_client(int fd, const nr_enroll_config_t *cfg) {
         goto out;
     }
 
-    send_response(fd, 201, "Created", "application/x-pem-file", cert_pem);
+    send_response(fd, 200, "OK", "application/x-pem-file", cert_pem);
     fprintf(stderr, "enrollment: issued certificate for device_id=%s\n",
             device_id);
 
