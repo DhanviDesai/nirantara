@@ -1,0 +1,104 @@
+---
+description: Security rules for PKI, TLS, key handling, and MQTT auth. Apply to tls.c, enroll.c, keystore.c and any file touching certs or keys.
+globs: ["**/tls.c", "**/enroll.c", "**/keystore.c", "**/mqtt.c", "**/*cert*", "**/*key*"]
+alwaysApply: false
+---
+
+# Security Rules
+
+## Non-negotiable Rules
+
+1. **Private keys never leave the device.** The enrollment flow sends a CSR (public key
+   only). If you find yourself serialising `EVP_PKEY` with the private component
+   and sending it over any network, stop.
+
+2. **Always verify the server certificate** against the pinned CA. Never set
+   `SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL)` — not even in test builds.
+   Use a separate test CA for dev, not disabled verification.
+
+3. **Minimum TLS 1.2.** `SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION)`.
+   TLS 1.3 preferred but not mandatory (embedded targets may lack it).
+
+4. **Zero sensitive memory before free.**
+   ```c
+   OPENSSL_cleanse(key_buf, key_buf_len);
+   free(key_buf);
+   ```
+
+5. **CA cert is pinned, not just trusted.** Build a fresh `X509_STORE`, add only
+   your CA cert. Do not call `SSL_CTX_set_default_verify_paths()` — that trusts
+   the system CA bundle, defeating pinning.
+
+## OpenSSL Error Handling
+
+Always drain the error queue after a failure:
+```c
+static void log_ssl_errors(const char *context) {
+    unsigned long e;
+    while ((e = ERR_get_error()) != 0)
+        NR_LOG_ERR("%s: %s", context, ERR_reason_error_string(e));
+}
+```
+
+## Key Generation
+
+Use ECDSA P-256. Do not use RSA < 2048. Do not use DSA.
+
+```c
+EVP_PKEY_CTX *kctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+EVP_PKEY_keygen_init(kctx);
+EVP_PKEY_CTX_set_ec_paramgen_curve_nid(kctx, NID_X9_62_prime256v1);
+EVP_PKEY *key = NULL;
+EVP_PKEY_keygen(kctx, &key);
+```
+
+## CSR Construction
+
+The CSR CN must be the device ID (stable, unique per device).
+Do not put sensitive data (username, email) in the Subject.
+
+```c
+X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+    (unsigned char *)device_id, -1, -1, 0);
+X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC,
+    (unsigned char *)"Nirantara", -1, -1, 0);
+X509_REQ_sign(req, key, EVP_sha256());   // sign with sha256, not sha1
+```
+
+## MQTT mTLS
+
+Mosquitto must be configured with:
+- `require_certificate true`
+- `use_identity_as_username true`  ← client cert CN becomes MQTT username
+- `cafile /etc/nirantara/ca.crt`
+
+On the client (nirantara-net):
+```c
+mosquitto_tls_set(mosq,
+    cafile,       // pinned CA
+    NULL,         // capath
+    certfile,     // client cert
+    keyfile,      // client private key
+    NULL);        // no passphrase callback (key in memory)
+mosquitto_tls_opts_set(mosq, SSL_VERIFY_PEER, "tlsv1.2", NULL);
+```
+
+## Enrollment Endpoint
+
+The enrollment HTTP handler must:
+1. Validate the CSR signature (client owns the private key)
+2. Validate device_id is in the allowed set (or signed by a provisioning token)
+3. Sign via KMS — never with a local CA key file
+4. Return PEM cert, log issuance with device_id + timestamp
+
+The client must:
+1. Verify the returned cert is signed by the pinned CA before storing
+2. Store cert in platform keystore (iOS Keychain / Android Keystore), not in app files
+
+## What to Audit When Reviewing
+
+- Any `SSL_VERIFY_NONE` → reject
+- Any serialisation of private key bytes → reject
+- Any use of `MD5` or `SHA1` for signing → reject
+- Any `system()` call with a cert/key path argument → reject
+- Any hardcoded key or cert string (except the pinned CA in the test fixture) → reject

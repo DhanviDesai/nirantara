@@ -1,0 +1,44 @@
+---
+description: Project overview, goals, and component map. Always apply for any file in this repo.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Project Nirantara
+
+An edge-native telemetry and messaging infrastructure written in C11. The immediate
+workload is a multiplayer gaming backend (~5K concurrent users). Every architectural
+decision is made with **connected vehicle telematics** as the primary long-term target.
+
+## Strategic Goals
+- Validate edge buffering + store-and-forward patterns under a real workload
+- Produce a reusable C networking library (mTLS + MQTT) portable to embedded Linux
+- Generate a connected vehicle telemetry pipeline proposal backed by a working prototype
+
+## Repository Layout
+
+```
+lib/nirantara-net/   # Reusable C networking library (the core deliverable)
+  include/nirantara/ #   Public API headers
+  src/               #   Implementations
+edge/                # Edge node sync agent (Mosquitto subscriber + SQLite + Postgres sync)
+flutter/             # Flutter FFI bindings to nirantara-net
+tools/ca/            # CA setup scripts
+tools/test/          # Load simulators and test harnesses
+docs/                # Architecture documentation
+```
+
+## Component Responsibilities
+
+| Component | Owns | Does NOT own |
+|-----------|------|--------------|
+| nirantara-net | TLS context, mTLS MQTT, CSR/enrollment, key generation | Business logic, routing, DB |
+| edge agent | SQLite buffering, MQTT subscription, Postgres sync | Client auth, TLS |
+| Mosquitto | mTLS broker, topic routing | Event persistence |
+| Postgres (cloud) | Authoritative state, reporting | Edge buffering |
+
+## Key Invariants
+- The nirantara-net library MUST compile on ARM Linux (Cortex-A target) without modification
+- Private keys NEVER leave the device / secure enclave
+- The edge agent MUST handle Mosquitto restart without data loss (SQLite WAL)
+- All sync to Postgres is idempotent (upsert, not insert)

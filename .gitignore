@@ -1,0 +1,29 @@
+build/
+build-debug/
+
+# Keys and certs (never commit)
+*.key
+*.pem
+*.p12
+*.pfx
+/tools/ca/ca/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp
+*~
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake

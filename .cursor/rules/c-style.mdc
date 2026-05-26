@@ -1,0 +1,123 @@
+---
+description: C11 coding style, naming conventions, error handling, and memory discipline. Apply to all .c and .h files.
+globs: ["**/*.c", "**/*.h"]
+alwaysApply: false
+---
+
+# C Style Guide
+
+## Standard and Compiler Flags
+- C11 (`-std=c11`)
+- Always compile with: `-Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes -fstack-protector-strong`
+- Debug builds add: `-fsanitize=address,undefined`
+- Never suppress warnings with pragmas; fix the root cause
+
+## Naming Conventions
+
+```c
+// Types: snake_case with _t suffix
+typedef struct nr_ctx nr_ctx_t;
+typedef enum { NR_OK = 0, NR_ERR_TLS = -1 } nr_error_t;
+
+// Functions: module_verb_noun
+nr_error_t nr_tls_init_ctx(nr_ctx_t *ctx);
+int        buffer_event_insert(buffer_t *buf, const char *topic, const uint8_t *data, size_t len);
+
+// Constants/macros: SCREAMING_SNAKE with module prefix
+#define NR_MAX_TOPIC_LEN   256
+#define NR_DEFAULT_PORT    8883
+
+// Private (file-scope) functions: static, no module prefix needed
+static int load_ca_cert(SSL_CTX *ssl_ctx, const char *pem);
+```
+
+## Module Prefixes
+| Module | Prefix |
+|--------|--------|
+| nirantara-net public | `nr_` |
+| nirantara-net internal | `nr_` |
+| edge buffer | `buffer_` |
+| edge sync | `sync_` |
+| edge subscriber | `sub_` |
+
+## Error Handling
+
+```c
+// ALWAYS check return values — no silent failures
+SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+if (!ctx) {
+    nr__log_ssl_error("SSL_CTX_new");
+    return NR_ERR_TLS;
+}
+
+// Cleanup on error: use goto for multi-resource functions
+nr_error_t nr_tls_init_ctx(nr_ctx_t *ctx) {
+    SSL_CTX *ssl_ctx = NULL;
+    X509    *ca      = NULL;
+    BIO     *bio     = NULL;
+    nr_error_t rc    = NR_ERR_TLS;
+
+    ssl_ctx = SSL_CTX_new(TLS_client_method());
+    if (!ssl_ctx) goto out;
+
+    bio = BIO_new_mem_buf(ctx->cfg.ca_cert_pem, -1);
+    if (!bio) goto out;
+
+    ca = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    if (!ca) goto out;
+
+    /* ... success path ... */
+    rc = NR_OK;
+
+out:
+    if (bio) BIO_free(bio);
+    if (ca)  X509_free(ca);
+    if (rc != NR_OK && ssl_ctx) { SSL_CTX_free(ssl_ctx); ssl_ctx = NULL; }
+    ctx->ssl_ctx = ssl_ctx;
+    return rc;
+}
+```
+
+## Memory Discipline
+- Every `malloc` is checked immediately; on NULL return `NR_ERR_MEM`
+- Matching free in the same scope level where possible
+- Use `goto out` pattern for multi-allocation functions (no nested ifs)
+- Zero sensitive memory before freeing: `OPENSSL_cleanse(key_buf, len)`
+- No `realloc` without capturing return in a temp pointer first
+
+## Threading
+- Use `_Atomic` (C11 stdatomic) for flags shared between threads
+- Mutexes: `pthread_mutex_t`, always `pthread_mutex_destroy` in cleanup
+- Never hold a mutex across a blocking I/O call
+- The sync thread accesses SQLite via a **separate** db connection (WAL mode allows this)
+
+## Structs and Headers
+
+```c
+// Public header: opaque pointer only — never expose internals
+typedef struct nr_ctx nr_ctx_t;   // in net.h
+
+// Internal header: full definition
+struct nr_ctx {                    // in internal.h
+    nr_config_t      cfg;
+    SSL_CTX         *ssl_ctx;
+    struct mosquitto *mosq;
+    EVP_PKEY        *keypair;
+    /* ... */
+};
+```
+
+## Logging
+Use the internal `NR_LOG` macro — never `printf` in library code:
+
+```c
+NR_LOG_INFO("mqtt: connected to %s:%d", ctx->cfg.server_ip, ctx->cfg.mqtt_port);
+NR_LOG_ERR("tls: %s", ERR_reason_error_string(ERR_get_error()));
+```
+
+## What NOT to Do
+- No `strncpy` (use `strlcpy` or manual + null-terminate)
+- No VLAs (variable-length arrays) — fixed max sizes or heap
+- No global mutable state outside of the `nr_ctx_t` / `buffer_t` structs
+- No `exit()` inside library code — return error codes up the stack
+- No `assert()` in production paths — use explicit checks and return codes

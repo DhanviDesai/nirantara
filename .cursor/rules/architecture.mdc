@@ -1,0 +1,120 @@
+---
+description: Architecture decisions, data flow, and component boundaries. Apply when working on any source file.
+globs: ["**/*.c", "**/*.h", "**/CMakeLists.txt"]
+alwaysApply: false
+---
+
+# Architecture Reference
+
+## Data Flow
+
+```
+Flutter app (Dart)
+  └── dart:ffi
+        └── nirantara-net (C library)
+              ├── TLS context (OpenSSL, CA-pinned)
+              ├── Enrollment: POST /enroll → signed client cert
+              └── MQTT client (libmosquitto, mTLS)
+                    │  QoS 1 publish
+                    ▼
+            Mosquitto broker (edge node, port 8883, mTLS)
+                    │  local subscription
+                    ▼
+            Edge sync agent (C)
+              ├── SQLite (WAL mode) ← event buffer
+              └── Sync thread (every 10 min)
+                    │  libpq batch upsert
+                    ▼
+            PostgreSQL (cloud, ap-mumbai-1)
+```
+
+## Security Model
+
+```
+Trust anchor: CA cert embedded in app binary (pinned)
+CA private key: AWS KMS — never on disk
+
+Device identity:
+  1. App generates ECDSA P-256 key pair (stays in iOS Keychain / Android Keystore)
+  2. Builds CSR, POSTs to enrollment endpoint over pinned-TLS HTTPS
+  3. Enrollment server sends CSR to KMS → signs → returns cert to app
+  4. All MQTT connections use mTLS: client cert + pinned CA
+
+Edge node has NO public TLS endpoint for game traffic.
+Only port 443 (enrollment/mgmt, nginx-terminated) is public.
+Port 8883 (MQTT) requires valid client cert.
+```
+
+## nirantara-net Library API Contract
+
+The library is **not thread-safe** at the `nr_ctx_t` level. Callers must not share
+a context across threads. Internal threads (e.g., the mosquitto loop thread) are
+managed by the library and do not expose shared state.
+
+```c
+// Lifecycle (call in this order)
+nr_ctx_t *ctx = nr_create();
+nr_init(ctx, &cfg);            // loads CA cert, sets up SSL_CTX
+nr_generate_keypair(ctx);      // generates ECDSA key pair
+nr_enroll(ctx, device_id, cert_buf, cert_buf_len);  // first run only
+nr_connect(ctx, cert_pem, key_pem);                 // mTLS MQTT connect
+nr_subscribe(ctx, "game/+/events", on_event, NULL);
+nr_publish(ctx, "game/123/score", payload, len, 1);
+nr_disconnect(ctx);
+nr_destroy(ctx);
+```
+
+## Edge Agent Design
+
+The edge agent runs two concurrent activities:
+
+1. **Mosquitto subscriber loop** (main thread after init)
+   - Calls `mosquitto_loop_forever()`
+   - On each message: calls `buffer_event_insert()`
+   - SQLite write: synchronous, in the callback
+
+2. **Sync thread** (pthread, started at init)
+   - Sleeps `SYNC_INTERVAL_SEC` (default: 600)
+   - Wakes, opens a **separate** SQLite connection (WAL allows concurrent readers)
+   - Reads all unflushed events, batch-upserts to Postgres via libpq
+   - Marks flushed rows, closes Postgres connection
+
+Separation rationale: Mosquitto loop blocks; sync is periodic I/O. Do not mix.
+
+## SQLite Schema
+
+```sql
+CREATE TABLE events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic    TEXT    NOT NULL,
+    payload  BLOB    NOT NULL,
+    ts       INTEGER NOT NULL DEFAULT (unixepoch()),
+    flushed  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_events_flushed ON events(flushed, ts);
+```
+
+## Postgres Schema (cloud)
+
+```sql
+CREATE TABLE game_events (
+    device_id  TEXT    NOT NULL,
+    topic      TEXT    NOT NULL,
+    payload    JSONB   NOT NULL,
+    ts         BIGINT  NOT NULL,
+    edge_node  TEXT    NOT NULL,
+    PRIMARY KEY (device_id, topic, ts)
+);
+```
+
+Upsert on conflict (device_id, topic, ts) → DO NOTHING. Idempotent.
+
+## Vehicle Telemetry Mapping
+
+When adapting this for automotive:
+- `flutter app` → TCU embedded application (same C library, different caller)
+- `MQTT topic game/+/events` → `vehicle/{vin}/can/{pgn}` or `vehicle/{vin}/uds/{sid}`
+- `SQLite buffer` → AUTOSAR PersistencyMgr or raw file on eMMC
+- `Sync interval 10 min` → trigger on connectivity (RSSI threshold) or interval
+- `Enrollment endpoint` → V2X PKI / IEEE 1609.2 certificate management
+- `Edge node` → MEC node at cell tower or RSU (Road Side Unit)

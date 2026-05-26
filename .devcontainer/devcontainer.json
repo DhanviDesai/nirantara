@@ -1,0 +1,30 @@
+{
+  "name": "Nirantara Dev",
+  "image": "ubuntu:22.04",
+  "remoteEnv": {
+    "DEBIAN_FRONTEND": "noninteractive"
+  },
+  "postCreateCommand": "apt-get update && apt-get install -y gcc make cmake pkg-config libssl-dev libmosquitto-dev libsqlite3-dev libpq-dev mosquitto mosquitto-clients valgrind clang-format gdb curl ca-certificates && echo 'Dev environment ready'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools-themes",
+        "twxs.cmake"
+      ],
+      "settings": {
+        "C_Cpp.default.cStandard": "c11",
+        "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+        "C_Cpp.default.includePath": [
+          "${workspaceFolder}/lib/nirantara-net/include",
+          "${workspaceFolder}/edge/include"
+        ],
+        "cmake.buildDirectory": "${workspaceFolder}/build",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "forwardPorts": [8883, 1883],
+  "mounts": []
+}
