@@ -18,6 +18,12 @@ sudo tools/ca/gen_ca.sh
 make run-edge
 ```
 
+## Build Artifacts
+
+GitHub Actions builds a Linux release artifact on every push to `main`, including
+merged pull requests. Download the generated `nirantara-linux-x86_64` tarball from
+the completed **Build** workflow run's artifacts section.
+
 ## Structure
 
 ```
