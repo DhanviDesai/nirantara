@@ -432,17 +432,24 @@ out:
 }
 
 static int der_to_pem(const unsigned char *der, size_t der_len, char **pem_out) {
+    const unsigned char *p = der;
+    X509 *cert = NULL;
     BIO *bio = NULL;
     BUF_MEM *mem = NULL;
     char *pem = NULL;
     int rc = -1;
+
+    cert = d2i_X509(NULL, &p, (long)der_len);
+    if (!cert) {
+        goto out;
+    }
 
     bio = BIO_new(BIO_s_mem());
     if (!bio) {
         goto out;
     }
 
-    if (PEM_write_bio(bio, "CERTIFICATE", "", der, (long)der_len) != 1) {
+    if (PEM_write_bio_X509(bio, cert) != 1) {
         goto out;
     }
 
@@ -461,6 +468,7 @@ static int der_to_pem(const unsigned char *der, size_t der_len, char **pem_out) 
 out:
     free(pem);
     BIO_free(bio);
+    X509_free(cert);
     return rc;
 }
 
