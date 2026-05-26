@@ -9,6 +9,7 @@ install-deps:
 	apt-get update && apt-get install -y \
 		gcc make cmake pkg-config \
 		libssl-dev libmosquitto-dev libsqlite3-dev libpq-dev \
+		libcurl4-openssl-dev \
 		mosquitto mosquitto-clients \
 		valgrind clang-format gdb
 
