@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUILD_TYPE: Release
+  ARTIFACT_NAME: nirantara-linux-x86_64
+
+jobs:
+  build:
+    name: Build Linux artifact
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            pkg-config \
+            libssl-dev \
+            libmosquitto-dev \
+            libsqlite3-dev \
+            libpq-dev
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+
+      - name: Build
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Package artifact
+        run: |
+          set -euo pipefail
+
+          package_dir="dist/$ARTIFACT_NAME"
+          mkdir -p "$package_dir/bin" "$package_dir/lib" "$package_dir/include/nirantara"
+
+          cp build/edge/nirantara-edge "$package_dir/bin/"
+          cp -P build/lib/nirantara-net/libnirantara-net.so* "$package_dir/lib/"
+          cp lib/nirantara-net/include/nirantara/net.h "$package_dir/include/nirantara/"
+          cp README.md LICENSE "$package_dir/"
+
+          tarball="$ARTIFACT_NAME-${GITHUB_SHA::7}.tar.gz"
+          tar -C dist -czf "dist/$tarball" "$ARTIFACT_NAME"
+          sha256sum "dist/$tarball" > "dist/$tarball.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-${{ github.run_number }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
