@@ -23,9 +23,18 @@ make run-edge
 ```
 lib/nirantara-net/   Reusable C networking library (mTLS + MQTT)
 edge/                Edge sync agent (Mosquitto subscriber + SQLite + Postgres sync)
+enrollment/          KMS-backed certificate enrollment API
 flutter/             Flutter FFI bindings
 tools/ca/            CA setup scripts
 ```
+
+## Enrollment API
+
+`nirantara-enrollment` serves `POST /enroll`, accepts a client CSR plus the
+`X-Device-Id` header, and returns a PEM certificate signed through AWS KMS. The
+issued certificate subject uses the client-provided device id as `CN=<device_id>`.
+See [docs/enrollment.md](docs/enrollment.md) for KMS setup and runtime
+configuration.
 
 ## Environment Variables (edge agent)
 

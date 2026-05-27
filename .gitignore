@@ -1,5 +1,6 @@
 build/
 build-debug/
+dist/
 
 # Keys and certs (never commit)
 *.key

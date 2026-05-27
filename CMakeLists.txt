@@ -20,6 +20,7 @@ endif()
 # ── Dependencies ──────────────────────────────────────────────────────────────
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
+find_package(CURL REQUIRED)
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
@@ -29,3 +30,4 @@ pkg_check_modules(LIBPQ     REQUIRED libpq)
 # ── Subprojects ───────────────────────────────────────────────────────────────
 add_subdirectory(lib/nirantara-net)
 add_subdirectory(edge)
+add_subdirectory(enrollment)
