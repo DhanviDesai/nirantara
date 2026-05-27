@@ -42,6 +42,14 @@ only; it does not represent the production KMS CA.
 | `NR_ENROLL_PORT` | no | `8080` | HTTP listen port, intended to sit behind TLS termination |
 | `NR_ENROLL_CERT_TTL_DAYS` | no | `365` | Issued certificate validity |
 
+## Connection handling
+
+The enrollment listener handles multiple simultaneous HTTP clients with
+nonblocking sockets. Linux builds use `epoll`; other POSIX builds fall back to
+`select`. Each connection has independent request and response buffers, so slow
+or partial clients no longer block the listener from accepting and serving other
+connections.
+
 ## Request
 
 ```http
