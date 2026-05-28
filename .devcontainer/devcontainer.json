@@ -4,7 +4,7 @@
   "remoteEnv": {
     "DEBIAN_FRONTEND": "noninteractive"
   },
-  "postCreateCommand": "apt-get update && apt-get install -y gcc make cmake pkg-config libssl-dev libmosquitto-dev libsqlite3-dev libpq-dev mosquitto mosquitto-clients valgrind clang-format gdb curl ca-certificates && echo 'Dev environment ready'",
+  "postCreateCommand": "bash tools/setup_ubuntu.sh && echo 'Dev environment ready'",
   "customizations": {
     "vscode": {
       "extensions": [

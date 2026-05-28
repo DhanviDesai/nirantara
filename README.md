@@ -8,7 +8,9 @@ See [Project Nirantara document](docs/) for full architecture.
 ## Quick Start (Codespaces / Ubuntu 22.04)
 
 ```bash
-make install-deps
+# Install native build and local testing dependencies.
+bash tools/setup_ubuntu.sh
+
 make build
 
 # Set up local CA (dev only)
@@ -17,6 +19,8 @@ sudo tools/ca/gen_ca.sh
 # Run edge agent (needs local Mosquitto on port 1883 for dev)
 make run-edge
 ```
+
+`make install-deps` runs the same setup script.
 
 ## Structure
 
