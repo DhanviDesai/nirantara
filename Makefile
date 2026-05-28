@@ -6,12 +6,7 @@ BUILD_DIR_DEBUG := build-debug
 all: build
 
 install-deps:
-	apt-get update && apt-get install -y \
-		gcc make cmake pkg-config \
-		libssl-dev libmosquitto-dev libsqlite3-dev libpq-dev \
-		libcurl4-openssl-dev \
-		mosquitto mosquitto-clients \
-		valgrind clang-format gdb
+	bash tools/setup_ubuntu.sh
 
 build:
 	cmake -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
