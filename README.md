@@ -3,7 +3,8 @@
 Edge-native telemetry and messaging infrastructure in C11. Gaming workload as the
 test bed; connected vehicle telematics as the long-term target.
 
-See [Project Nirantara document](docs/) for full architecture.
+See [Project Nirantara architecture](docs/architecture.md) for the full system
+diagram and data flow.
 
 ## Quick Start (Codespaces / Ubuntu 22.04)
 
